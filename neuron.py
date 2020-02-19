@@ -1,6 +1,7 @@
 import numpy as np
 import math
 import random
+import pickle
 
 
 class Input:
@@ -194,6 +195,78 @@ class SNN:
         for idx, input_neuron in enumerate(self.input):
             input_neuron.doesFirePost = values[idx]
 
+    def saveWeights(self):
+        tmp = []
+        for layer in range(len(self.neurons)):
+            tmp.append([])
+            for neuron in range(len(self.neurons[layer])):
+                tmp[layer].append([])
+                for weight_value in self.neurons[layer][neuron].children_weights:
+                    tmp[layer][neuron].append(weight_value)
+        print(tmp)
+        weight_dict = pickle.load(open("save.p", "rb"))
+        print(weight_dict)
+        name = input("Enter name for save file: ")
+        if name in weight_dict:
+            overwrite_check = input("Overwrite existing save? Y/N")
+            while overwrite_check.lower() != "y" and overwrite_check.lower() != "n":
+                overwrite_check = input("Invalid input")
+            if overwrite_check.lower() == "y":
+                weight_dict[name.lower()] = tmp
+            else:
+                pass
+        else:
+            weight_dict[name.lower()] = tmp
+        pickle.dump(weight_dict, open("save.p", "wb"))
+
+    def checkForConsistent(self, weights):  # Checks to make sure that weights is consistent with NN setup accepts weights as input
+        tmp_existing_nn = []
+        for layer in self.neurons:
+            tmp_existing_layer = []
+            for neuron in layer:
+                tmp_existing_neuron_children = len(neuron.children_weights)
+                tmp_existing_layer.append(tmp_existing_neuron_children)
+            tmp_existing_nn.append(tmp_existing_layer)
+
+        tmp_request_nn = []
+        for layer in weights:
+            tmp_existing_layer = []
+            for neuron in layer:
+                tmp_existing_neuron_children = len(neuron)
+                tmp_existing_layer.append(tmp_existing_neuron_children)
+            tmp_request_nn.append(tmp_existing_layer)
+
+        return tmp_existing_nn == tmp_request_nn
+
+    def overwriteWeights(self, weights):
+        for layer_num in range(len(weights)):
+            for neuron_num in range(len(weights[layer_num])):
+                print("\nold", self.neurons[layer_num][neuron_num].children_weights)
+                self.neurons[layer_num][neuron_num].children_weights = weights[layer_num][neuron_num]
+                print("New", self.neurons[layer_num][neuron_num].children_weights)
+
+
+    def loadWeights(self):
+        weight_dict = pickle.load(open("save.p", "rb"))
+        for key in weight_dict:
+            print(key)
+        select = input("Enter a name or 'q' to cancel")
+        if select.lower() not in weight_dict:
+            while select.lower() not in weight_dict:
+                if select.lower() == "q":
+                    break
+                select = input("That is not a valid save. Enter again")
+        if select.lower() in weight_dict:
+            new_weights = weight_dict[select.lower()]
+            if self.checkForConsistent(new_weights):
+                self.overwriteWeights(new_weights)
+            else:
+                print("Format does not match")
+
+
+
+
+
 randnum = []
 for rand in range(10):
     randnum.append(random.random())
@@ -202,7 +275,11 @@ for rand in range(10):
 nn1 = SNN(10, 8, 4, 5)
 nn1.setupFF()
 nn1.setInput(randnum)
+
+#nn1.saveWeights()
+nn1.loadWeights()
 if __name__ == "__main__":
     for _ in range(100):
-        print(nn1)
-        nn1.runThrough()
+        #print(nn1)
+        #nn1.runThrough()
+        pass
