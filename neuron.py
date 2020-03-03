@@ -2,10 +2,9 @@ import numpy as np
 import math
 import random
 import pickle
-
+import queue
 
 class Input:
-
     def __init__(self):
         self.doesFirePost = 0
         self.children = []
@@ -37,6 +36,7 @@ class Neuron(Input):
 
     def __init__(self):
         super().__init__()
+        self.parents = []
         self.current = 0
         self.voltage = 0
         self.resistance = 5
@@ -47,7 +47,7 @@ class Neuron(Input):
         self.doesFire = 0
         self.postFireTimes = []
 
-        self.children_weights = []
+        # self.children_weights = []
         self.child_weight_train = []
         self.self_weight = 1   # Should be between 0 and 1, dictates percent of current that is subtracted from current for suppression
 
@@ -77,6 +77,9 @@ class Neuron(Input):
             self.children_weights.append(np.random.normal(0.75, 1))
         self.child_weight_train.append(0)
         self.children_neuron_times.append(10000)
+
+    def addParentConnection(self, neuron):
+        self.parents.append(neuron)
 
     def getRevSSum(self):
         """
@@ -152,6 +155,7 @@ class SNN:
                 self.neurons.append([])
                 for idxInLayer in range(layers[layer_num + 1]):
                     self.neurons[layer_num + 1].append(Neuron())
+        self.just_fired_neurons = queue.Queue() # Queue for neurons that just fired and need to update weights
 
     def __str__(self):
         str = ""
@@ -169,6 +173,9 @@ class SNN:
             for neuron in layer:
                 for child_neuron in self.neurons[layer_idx + 1]:
                     neuron.addChildConnection(child_neuron)
+                if layer_idx > 0:
+                    for parent_neuron in self.neurons[layer_idx - 1]:
+                        neuron.addParentConnection(parent_neuron)
 
     def runThrough(self):
         for input_n in self.input:
@@ -245,7 +252,6 @@ class SNN:
                 self.neurons[layer_num][neuron_num].children_weights = weights[layer_num][neuron_num]
                 print("New", self.neurons[layer_num][neuron_num].children_weights)
 
-
     def loadWeights(self):
         weight_dict = pickle.load(open("save.p", "rb"))
         for key in weight_dict:
@@ -263,6 +269,11 @@ class SNN:
             else:
                 print("Format does not match")
 
+    def adjustWeights(self):   # Performs STDP unsupervised learning for first neuron in queue of neurons that just fired
+        fired_neuron = self.just_fired_neurons.get()   # item in queue is format: [neuron_instance, # in layer]
+        for pre_neuron in fired_neuron[0].parents:
+            #get position of fired_neuron in layer, that is the idx used to get weight in pre_neuron
+            idx_weight = fired_neuron[1]
 
 
 
@@ -277,7 +288,7 @@ nn1.setupFF()
 nn1.setInput(randnum)
 
 #nn1.saveWeights()
-nn1.loadWeights()
+#nn1.loadWeights()
 if __name__ == "__main__":
     for _ in range(100):
         #print(nn1)

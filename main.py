@@ -4,7 +4,7 @@ import random
 
 
 class Neuron:
-    def __init__(self,preSN=None, preWeight=None, selfWeight=0.5):
+    def __init__(self, preSN=None, preWeight=None, selfWeight=0.5):
         if preSN is None:
             self.preSN = []
         if preWeight is None:
@@ -227,13 +227,13 @@ def passThrough(neurons):
         #print("\n")
     print("\n")
 
-z
+
 right_input = [[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[1,1,1,1,1],[0,0,0,0,0]]
 no_input = [[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]]
 
 nn1 = setupFeedForward(25, 15, 8, 3, 1)
 for idx in range(50):
-    defineInputs(left_input, nn1)
+    defineInputs(right_input, nn1)
     for idx2 in range(10):
         passThrough(nn1)
     defineInputs(right_input, nn1)
@@ -255,7 +255,7 @@ for layer in range(len(nn1)-1):
 defineInputs(no_input, nn1)
 for idx4 in range(50):
     passThrough(nn1)
-defineInputs(left_input, nn1)
+defineInputs(right_input, nn1)
 for idx3 in range(50):
     passThrough(nn1)
 input2FR = []
