@@ -8,24 +8,24 @@ class Input:
     def __init__(self):
         self.doesFirePost = 0
         self.children = []
-        self.children_weights = []
+        self.children_weights = {}
 
-        self.sSum = []
+        self.sSum = {}
         self.tau_1 = 1
 
-    def getSSum(self, idx):
+    def getSSum(self, neuron):
         """
         Updates SSum for parent node and returns value
         """
-        self.sSum[idx] = math.exp(-1.0/self.tau_1) * self.sSum[idx] + self.doesFirePost
-        return self.sSum[idx]
+        self.sSum[neuron] = math.exp(-1.0/self.tau_1) * self.sSum[neuron] + self.doesFirePost
+        return self.sSum[neuron]
 
     def addToChildCurrent(self):
         """
         Adds product of S and weight to each child
         """
-        for idx, child in enumerate(self.children):
-            child.current += self.children_weights[idx] * self.getSSum(idx)
+        for child in self.children:
+            child.current += self.children_weights[child] * self.getSSum(child)
 
 class Neuron(Input):
 
@@ -70,11 +70,11 @@ class Neuron(Input):
         Also appends zeros to all other required lists
         """
         self.children.append(neuron)
-        self.sSum.append(0)
+        self.sSum[neuron] = 0
         if weightValue:
-            self.children_weights.append(weightValue)
+            self.children_weights[neuron] = weightValue
         else:
-            self.children_weights.append(np.random.normal(0.75, 1))
+            self.children_weights[neuron] = np.random.normal(0.75, 1)
         self.child_weight_train.append(0)
         self.children_neuron_times.append(10000)
 
@@ -148,14 +148,15 @@ class SNN:
             for idx in range(layers[0]):
                 tmpInput = Input()
                 self.input.append(tmpInput)
-                tmpInput.children_weights.append(1)
-                tmpInput.sSum.append(0)
-                self.neurons[0].append(Neuron())
+                neuron = Neuron()
+                self.neurons[0].append(neuron)
+                tmpInput.children_weights[neuron] = 1
+                tmpInput.sSum[neuron] = 0
             for layer_num in range(len(layers) - 1):
                 self.neurons.append([])
                 for idxInLayer in range(layers[layer_num + 1]):
                     self.neurons[layer_num + 1].append(Neuron())
-        self.just_fired_neurons = queue.Queue() # Queue for neurons that just fired and need to update weights
+        self.just_fired_neurons = queue.Queue() # Queue for neurons that just fired and need to update weights MOVE
 
     def __str__(self):
         str = ""
@@ -202,28 +203,52 @@ class SNN:
         for idx, input_neuron in enumerate(self.input):
             input_neuron.doesFirePost = values[idx]
 
+    def deleteSaves(self):
+        weight_dict = pickle.load(open("save.p", "rb"))
+        print("Existing files:")
+        for name in weight_dict:
+            print(name, ": ", weight_dict[name])
+        key_del = input("Enter filename to delete: ")
+        if key_del in weight_dict:
+            check = input("Are you sure you want to delete save: {}? (y/n)".format(key_del))
+            if check.lower() == "y":
+                del weight_dict[key_del]
+                print(key_del, " has been deleted")
+        pickle.dump(weight_dict, open("save.p", "wb"))
+        print("Existing files:")
+        for name in weight_dict:
+            print(name, ": ", weight_dict[name])
+
+
     def saveWeights(self):
+        key = self.generateNeuronKey()
         tmp = []
         for layer in range(len(self.neurons)):
             tmp.append([])
             for neuron in range(len(self.neurons[layer])):
-                tmp[layer].append([])
-                for weight_value in self.neurons[layer][neuron].children_weights:
-                    tmp[layer][neuron].append(weight_value)
-        print(tmp)
+                tmp[layer].append({})
+                for child in self.neurons[layer][neuron].children_weights:
+                    tmp[layer][neuron][key[layer][child]] = self.neurons[layer][neuron].children_weights[child]
         weight_dict = pickle.load(open("save.p", "rb"))
-        print(weight_dict)
-        name = input("Enter name for save file: ")
-        if name in weight_dict:
+        print("Existing files:")
+        for name in weight_dict:
+            print(name, ": ", weight_dict[name])
+        name = input("Enter name to save file under: ")
+
+        tmp_list = []
+        for key in weight_dict:
+            tmp_list.append(key.lower())
+
+        while name.lower() in tmp_list:
             overwrite_check = input("Overwrite existing save? Y/N")
             while overwrite_check.lower() != "y" and overwrite_check.lower() != "n":
                 overwrite_check = input("Invalid input")
             if overwrite_check.lower() == "y":
-                weight_dict[name.lower()] = tmp
+                break
             else:
-                pass
-        else:
-            weight_dict[name.lower()] = tmp
+                name = input("Enter a different name for save file: ")
+
+        weight_dict[name] = tmp
         pickle.dump(weight_dict, open("save.p", "wb"))
 
     def checkForConsistent(self, weights):  # Checks to make sure that weights is consistent with NN setup accepts weights as input
@@ -245,18 +270,49 @@ class SNN:
 
         return tmp_existing_nn == tmp_request_nn
 
+    def generateIDKey(self):
+        neuronKey = []
+        for idx, layer in enumerate(self.neurons):
+            neuronKey.append({})
+            for neuron in layer:
+                counter = 1
+                for child in neuron.children_weights:
+                    if child not in neuronKey[idx].values():
+                        while counter in neuronKey[idx]:
+                            counter += 1
+                        neuronKey[idx][counter] = child
+        return neuronKey
+    def generateNeuronKey(self):
+        neuronKey = []
+        for idx, layer in enumerate(self.neurons):
+            neuronKey.append({})
+            for neuron in layer:
+                counter = 1
+                for child in neuron.children_weights:
+                    if child not in neuronKey[idx].keys():
+                        while counter in neuronKey[idx].values():
+                            counter += 1
+                        neuronKey[idx][child] = counter
+        return neuronKey
+
     def overwriteWeights(self, weights):
+        key = self.generateIDKey()
         for layer_num in range(len(weights)):
             for neuron_num in range(len(weights[layer_num])):
                 print("\nold", self.neurons[layer_num][neuron_num].children_weights)
-                self.neurons[layer_num][neuron_num].children_weights = weights[layer_num][neuron_num]
+                self.neurons[layer_num][neuron_num].children_weights = {}
+                for child in weights[layer_num][neuron_num]:
+                    # print(child)
+                    # print(key)
+                    # print(key[child])
+                    self.neurons[layer_num][neuron_num].children_weights[key[layer_num][child]] = weights[layer_num][neuron_num][child]
                 print("New", self.neurons[layer_num][neuron_num].children_weights)
 
     def loadWeights(self):
         weight_dict = pickle.load(open("save.p", "rb"))
         for key in weight_dict:
             print(key)
-        select = input("Enter a name or 'q' to cancel")
+        select = input("Enter a name from above to load from or enter 'q' to cancel")
         if select.lower() not in weight_dict:
             while select.lower() not in weight_dict:
                 if select.lower() == "q":
@@ -282,15 +338,15 @@ randnum = []
 for rand in range(10):
     randnum.append(random.random())
 
-
 nn1 = SNN(10, 8, 4, 5)
 nn1.setupFF()
 nn1.setInput(randnum)
 
 #nn1.saveWeights()
+#nn1.deleteSaves()
 #nn1.loadWeights()
 if __name__ == "__main__":
     for _ in range(100):
-        #print(nn1)
-        #nn1.runThrough()
+        print(nn1)
+        nn1.runThrough()
         pass
