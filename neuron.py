@@ -9,6 +9,7 @@ class Input:
         self.doesFirePost = 0
         self.children = []
         self.children_weights = {}
+        self.lastFireTime = None
 
         self.sSum = {}
         self.tau_1 = 1
@@ -107,7 +108,7 @@ class Neuron(Input):
             time = self.timer + self.delay
             if time > 5000:
                 time -= 10000
-            self.postFireTimes.append(time + self.delay)
+            self.postFireTimes.append(time)
             self.doesFire = 1
         else:
             self.doesFire = 0
@@ -115,8 +116,14 @@ class Neuron(Input):
             if self.timer == self.postFireTimes[0]:
                 del self.postFireTimes[0]
                 self.doesFirePost = 1
+                self.lastFireTime = self.timer
             else:
                 self.doesFirePost = 0
+
+    def resetLastFire(self):
+        self.lastFireTime -= 5000
+        if self.lastFireTime < -10000:
+            self.lastFireTime = None
 
     def updateAvgFR(self):
         if len(self.firingRecord) < Neuron.avg_window:
@@ -192,6 +199,11 @@ class SNN:
             neuron.updateFiring()
             neuron.updateAvgFR()
         Neuron.timer += 1
+        if Neuron.timer > 5000:
+            Neuron.timer -= 10000
+            for neuron_layer in self.neurons:
+                for neurons in neuron_layer:
+                    neuron.resetLastFire()
 
     def setInput(self, values):
         """
