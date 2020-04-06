@@ -35,6 +35,12 @@ class Neuron(Input):
     delta_time = 0.05
     avg_window = 100
 
+    learning_rate = 1
+    stdp_time_constant = 1
+    stdp_offset = 0.5
+    max_weight = 1
+    min_weight = -1
+
     def __init__(self):
         super().__init__()
         self.parents = []
@@ -64,6 +70,7 @@ class Neuron(Input):
 
         self.neuron_gui = None
         self.child_weight_gui = []
+
 
     def addChildConnection(self, neuron, weightValue=None):
         """
@@ -110,19 +117,19 @@ class Neuron(Input):
                 time -= 10000
             self.postFireTimes.append(time)
             self.doesFire = 1
+            self.lastFireTime = self.timer
         else:
             self.doesFire = 0
         if self.postFireTimes:
             if self.timer == self.postFireTimes[0]:
                 del self.postFireTimes[0]
                 self.doesFirePost = 1
-                self.lastFireTime = self.timer
             else:
                 self.doesFirePost = 0
 
     def resetLastFire(self):
-        self.lastFireTime -= 5000
-        if self.lastFireTime < -10000:
+        self.lastFireTime -= 10000
+        if self.lastFireTime < -5000:
             self.lastFireTime = None
 
     def updateAvgFR(self):
@@ -142,6 +149,20 @@ class Neuron(Input):
             self.firingRecord.append(add)
             self.firingAvg = self.firingAvg + (add - remove)/float(Neuron.avg_window)
         print(self.firingRecord, self.firingAvg)
+
+    def stdp(self):
+        if self.doesFire == 1:
+            for parent_neuron in self.parents:
+                weight_value = parent_neuron.children_weights[self]
+                time_pre = parent_neuron.lastFireTime
+                if not time_pre:
+                    continue
+                time_post = self.lastFireTime
+                time_delta = (time_pre-time_post) * self.delta_time
+                time_comp = math.exp(time_delta / self.stdp_time_constant)
+                weight_delta = self.learning_rate * time_comp * (self.max_weight - weight_value) * \
+                               (weight_value - self.min_weight)
+                parent_neuron.children_weights[self] += weight_delta
 
 
 class SNN:
@@ -194,15 +215,17 @@ class SNN:
                 neuron.addToSelf()
                 neuron.updateFiring()
                 neuron.updateAvgFR()
+                neuron.stdp()
         for neuron in self.neurons[-1]:
             neuron.addToSelf()
             neuron.updateFiring()
             neuron.updateAvgFR()
+            neuron.stdp()
         Neuron.timer += 1
         if Neuron.timer > 5000:
             Neuron.timer -= 10000
             for neuron_layer in self.neurons:
-                for neurons in neuron_layer:
+                for neuron in neuron_layer:
                     neuron.resetLastFire()
 
     def setInput(self, values):
