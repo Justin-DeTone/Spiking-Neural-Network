@@ -3,6 +3,7 @@ import math
 import random
 import pickle
 import queue
+import read_file
 
 class Input:
     def __init__(self):
@@ -33,7 +34,7 @@ class Neuron(Input):
     timer = 0
     # subtract 10000 at 5000
     delta_time = 0.05
-    avg_window = 100
+    avg_window = 25
 
     learning_rate = 1
     stdp_time_constant = 1
@@ -133,22 +134,17 @@ class Neuron(Input):
             self.lastFireTime = None
 
     def updateAvgFR(self):
-        if len(self.firingRecord) < Neuron.avg_window:
-            if self.doesFire == 1:
-                self.firingRecord.append(1)
-            else:
-                self.firingRecord.append(0)
-            if len(self.firingRecord) == Neuron.avg_window:
-                self.firingAvg = 0
-                for item in self.firingRecord:
-                    self.firingAvg += item
-                self.firingAvg = self.firingAvg / float(Neuron.avg_window)
-        else:
-            remove = self.firingRecord.pop(0)
-            add = self.doesFire
-            self.firingRecord.append(add)
-            self.firingAvg = self.firingAvg + (add - remove)/float(Neuron.avg_window)
-        print(self.firingRecord, self.firingAvg)
+        self.firingRecord.append(self.doesFire)
+        divisor = len(self.firingRecord)
+        if len(self.firingRecord) >= Neuron.avg_window:
+            self.firingRecord.pop(0)
+            divisor = self.avg_window
+        result = 0
+        for doesFire in self.firingRecord:
+            result += doesFire
+        self.firingAvg = result / divisor
+
+
 
     def stdp(self):
         if self.doesFire == 1:
@@ -166,7 +162,14 @@ class Neuron(Input):
 
 
 class SNN:
-    def __init__(self, *layers):
+    def __init__(self, max_count, *layers):
+        self.count = 0   # count to change input
+        self.max_count = max_count
+        self.image_idx = 0
+        self.training_data = None
+        self.test_data = None
+        self.currentNumber = None
+
         self.input = []
         self.neurons = [[]]
         if len(layers) < 2:
@@ -207,6 +210,9 @@ class SNN:
                         neuron.addParentConnection(parent_neuron)
 
     def runThrough(self):
+        if self.count >= self.max_count:
+            self.count = 0
+            self.image_idx += 1
         for input_n in self.input:
             input_n.addToChildCurrent()
         for neuron_layer in self.neurons[:-1]:
@@ -366,22 +372,33 @@ class SNN:
             #get position of fired_neuron in layer, that is the idx used to get weight in pre_neuron
             idx_weight = fired_neuron[1]
 
-
-
+    def convertInput(self, list2):
+        pixel_list = []
+        for pixel in list2[1]:
+            pixel_list.append(pixel/255)
+        self.setInput(pixel_list)
+        self.currentNumber = list2[0][0]
 
 randnum = []
 for rand in range(10):
     randnum.append(random.random())
+nn_test = SNN(200, 20, 10, 5, 1)
+nn_test.setupFF()
 
-nn1 = SNN(10, 8, 4, 5)
+nn1 = SNN(100, 784, 250, 75, 35, 10)
 nn1.setupFF()
-nn1.setInput(randnum)
+
+img_list = read_file.return_image('./mnist/train-images.idx3-ubyte', './mnist/train-labels.idx1-ubyte', nn1.image_idx)
+nn1.convertInput(img_list)
 
 #nn1.saveWeights()
 #nn1.deleteSaves()
 #nn1.loadWeights()
 if __name__ == "__main__":
     for _ in range(100):
-        print(nn1)
+        #print(nn1)
+        img_list = read_file.return_image('./mnist/train-images.idx3-ubyte', './mnist/train-labels.idx1-ubyte',
+                                          nn1.image_idx)
+        nn1.convertInput(img_list)
         nn1.runThrough()
         pass

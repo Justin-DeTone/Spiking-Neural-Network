@@ -73,40 +73,59 @@ class SNNDisplay:
         self.neurons = neurons
         self.neuronDisp = []
         self.width_diff = 0
-        self.height_diff = 0
+        self.height_diff = []
+        self.radius = []
 
     def getRadius(self):
-        maxNPerLayer = 0
         for layer in self.neurons:
-            if len(layer) > maxNPerLayer:
-                maxNPerLayer = len(layer)
-        self.height_diff = can_height / maxNPerLayer
+            self.radius.append(len(layer))
 
+        #find max radius by height:
+        for radius in self.radius:
+            self.height_diff.append(can_height / radius)
         self.width_diff = can_width / len(self.neurons)
 
-        # Calculate radius according to height spacing
-        self.radius = can_height * 2/(5 * maxNPerLayer)
+        for idx, layer_num in enumerate(self.radius):
+            self.radius[idx] = can_height/layer_num * 2/5
 
-        #Calculate radius according to width spacing
-        tmp = can_width/(6 * len(self.neurons))
+        width_radius = can_width/(6 * len(self.neurons))
 
-        #Choose lower radius
-        if tmp < self.radius:
-            self.radius = tmp
+        # If width radius is lower over ride that layer:
+        for idx, radius in enumerate(self.radius):
+            if radius > width_radius:
+                self.radius[idx] = width_radius
+
+        # maxNPerLayer = 0
+        # for layer in self.neurons:
+        #     if len(layer) > maxNPerLayer:
+        #         maxNPerLayer = len(layer)
+        # self.height_diff = can_height / maxNPerLayer
+        #
+        # self.width_diff = can_width / len(self.neurons)
+        #
+        # # Calculate radius according to height spacing
+        # self.radius = can_height * 2/(5 * maxNPerLayer)
+        #
+        # #Calculate radius according to width spacing
+        # tmp = can_width/(6 * len(self.neurons))
+        #
+        # #Choose lower radius
+        # # if tmp < self.radius:
+        # #     self.radius = tmp
 
     def initNeurons(self):
         self.getRadius()
         x_coor = self.width_diff / 2
-        for layer in self.neurons:
+        for idx, layer in enumerate(self.neurons):
             self.neuronDisp.append([])
             y_coor = can_height / 2
-            y_coor -= self.height_diff * (len(layer) - 1)/2
+            y_coor -= self.height_diff[idx] * (len(layer) - 1)/2
             for neuron in layer:
-                tmp = NeuronDisplay(x_coor, y_coor, self.radius, neuron, master)
+                tmp = NeuronDisplay(x_coor, y_coor, self.radius[idx], neuron, master)
                 tmp.neuron = neuron # set Neuron = neuron
                 neuron.neuron_gui = tmp
                 self.neuronDisp[-1].append(tmp) # append to SNNDisplay
-                y_coor += self.height_diff
+                y_coor += self.height_diff[idx]
             x_coor += self.width_diff
 
     def initWeights(self):
@@ -159,8 +178,8 @@ def close():
     sys.exit()
 
 if __name__ == "__main__":
-    can_width = 900
-    can_height = 450
+    can_width = 1000
+    can_height = 700
 
     master = tk.Tk()
 
@@ -182,7 +201,6 @@ if __name__ == "__main__":
     master.protocol("WM_DELETE_WINDOW", close)
 
     # tk.mainloop()
-
     updateSNN(n.nn1)
 
     while 1:
