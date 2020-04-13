@@ -45,13 +45,16 @@ class NeuronDisplay:
     def display(self):
         self.item = w.create_oval(self.x_coor - self.radius, self.y_coor - self.radius, self.x_coor + self.radius,
                                   self.y_coor + self.radius, fill=self.getColor("#ff6600", self.neuron))
-        self.text = w.create_text(self.x_coor, self.y_coor, text="{:.1f}".format(self.neuron.firingAvg))
+        if self.radius > 6:
+            self.text = w.create_text(self.x_coor, self.y_coor, text="{:.1f}".format(self.neuron.firingAvg))
 
     def updateColor(self):
-        w.itemconfig(self.item, fill=self.getColor2("#ff6600", self.neuron))
+        w.itemconfig(self.item, fill=self.getColor("#ff6600", self.neuron))
 
     def updateText(self):
-        w.itemconfig(self.text, text="{:.1f}".format(self.neuron.firingAvg))
+        if self.radius > 6:
+            w.itemconfig(self.text, text="{:.1f}".format(self.neuron.firingAvg))
+        pass
 
 class WeightDisplay:
     def __init__(self, x_coor1, y_coor1, x_coor2, y_coor2, parent):
@@ -195,7 +198,7 @@ if __name__ == "__main__":
 
     a = SNNDisplay(n.nn1.neurons)
     a.initNeurons()
-    # a.initWeights()
+    #a.initWeights()
     a.displaySNN()
 
     master.protocol("WM_DELETE_WINDOW", close)

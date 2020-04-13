@@ -127,6 +127,8 @@ class Neuron(Input):
                 self.doesFirePost = 1
             else:
                 self.doesFirePost = 0
+        else:
+            self.doesFirePost = 0
 
     def resetLastFire(self):
         self.lastFireTime -= 10000
@@ -210,9 +212,9 @@ class SNN:
                         neuron.addParentConnection(parent_neuron)
 
     def runThrough(self):
-        if self.count >= self.max_count:
-            self.count = 0
-            self.image_idx += 1
+        # if self.count >= self.max_count:
+        #     self.count = 0
+        #     self.image_idx += 1
         for input_n in self.input:
             input_n.addToChildCurrent()
         for neuron_layer in self.neurons[:-1]:
@@ -233,6 +235,7 @@ class SNN:
             for neuron_layer in self.neurons:
                 for neuron in neuron_layer:
                     neuron.resetLastFire()
+        self.count += 1
 
     def setInput(self, values):
         """
@@ -379,13 +382,19 @@ class SNN:
         self.setInput(pixel_list)
         self.currentNumber = list2[0][0]
 
+def checkNewInput(snn):
+    if snn.count >= snn.max_count:
+        snn.count = 0
+        snn.image_idx += 1
+        snn.convertInput(read_file.return_image('./mnist/train-images.idx3-ubyte', './mnist/train-labels.idx1-ubyte', snn.image_idx))
+
 randnum = []
 for rand in range(10):
     randnum.append(random.random())
 nn_test = SNN(200, 20, 10, 5, 1)
 nn_test.setupFF()
 
-nn1 = SNN(100, 784, 250, 75, 35, 10)
+nn1 = SNN(25, 784, 250, 75, 35, 10)
 nn1.setupFF()
 
 img_list = read_file.return_image('./mnist/train-images.idx3-ubyte', './mnist/train-labels.idx1-ubyte', nn1.image_idx)
@@ -396,9 +405,7 @@ nn1.convertInput(img_list)
 #nn1.loadWeights()
 if __name__ == "__main__":
     for _ in range(100):
-        #print(nn1)
-        img_list = read_file.return_image('./mnist/train-images.idx3-ubyte', './mnist/train-labels.idx1-ubyte',
-                                          nn1.image_idx)
-        nn1.convertInput(img_list)
+        print(_, nn1)
+        checkNewInput(nn1)
         nn1.runThrough()
         pass
