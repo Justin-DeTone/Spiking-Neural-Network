@@ -13,7 +13,7 @@ class Input:
         self.lastFireTime = None
 
         self.sSum = {}
-        self.tau_1 = 1
+        self.tau_1 = 5
 
     def getSSum(self, neuron):
         """
@@ -29,6 +29,10 @@ class Input:
         for child in self.children:
             child.current += self.children_weights[child] * self.getSSum(child)
 
+    def addToFirstChild(self):
+        for child in self.children:
+            child.current += self.doesFirePost
+
 class Neuron(Input):
 
     timer = 0
@@ -38,7 +42,7 @@ class Neuron(Input):
 
     learning_rate = 1
     stdp_time_constant = 1
-    stdp_offset = 0.5
+    stdp_offset = 0.7
     max_weight = 1
     min_weight = -1
 
@@ -47,10 +51,12 @@ class Neuron(Input):
         self.parents = []
         self.current = 0
         self.voltage = 0
-        self.resistance = 5
-        self.voltage_threshold = 1
+        self.resistance = 1
+        self.voltage_threshold = 5
+        self.voltage_threshold_attenuation = 1
+        self.tau_3 = 1   # time constant for decay of voltage threshold when no firings
         self.bias = 0
-        self.delay = 10   # no of updates for impulse to reach next neuron
+        self.delay = 0   # no of updates for impulse to reach next neuron
 
         self.doesFire = 0
         self.postFireTimes = []
@@ -60,7 +66,7 @@ class Neuron(Input):
         self.self_weight = 1   # Should be between 0 and 1, dictates percent of current that is subtracted from current for suppression
 
         self.revSSum = 0
-        self.tau_2 = 1
+        self.tau_2 = 5
         self.tau_0 = 1
 
         self.current_neuron_time = 10000
@@ -83,7 +89,13 @@ class Neuron(Input):
         if weightValue:
             self.children_weights[neuron] = weightValue
         else:
-            self.children_weights[neuron] = np.random.normal(0.75, 1)
+            weight = np.random.normal(0.125, 0.25)
+            if weight > Neuron.max_weight:
+                self.children_weights[neuron] = Neuron.max_weight
+            elif weight < Neuron.min_weight:
+                self.children_weights[neuron] = Neuron.min_weight
+            else:
+                self.children_weights[neuron] = weight
         self.child_weight_train.append(0)
         self.children_neuron_times.append(10000)
 
@@ -105,13 +117,20 @@ class Neuron(Input):
         self.current += self.bias
         self.current += self.self_weight * self.getRevSSum() * self.current
 
-    def updateFiring(self):
-        """
-        Updates voltage, resetting if it crosses threshold, then updates variable doesFire if neuron fires
-        """
+    def updateVoltage(self):
         self.voltage += (-self.voltage + self.resistance * self.current) * Neuron.delta_time / float(self.tau_0)
         self.current = 0
-        if self.voltage >= self.voltage_threshold:
+
+    def simpleUpdateVoltage(self):
+        self.voltage += self.voltage_threshold / 5 * self.current
+        self.current = 0
+
+    def updateFiring(self):
+        """
+        updates variable doesFire if neuron fires
+        """
+
+        if self.voltage >= self.voltage_threshold * self.voltage_threshold_attenuation:
             self.voltage = 0
             time = self.timer + self.delay
             if time > 5000:
@@ -130,8 +149,18 @@ class Neuron(Input):
         else:
             self.doesFirePost = 0
 
+    def adjustAtten(self):
+        if self.lastFireTime:
+            time_delta = (self.timer - self.lastFireTime) * Neuron.delta_time
+        else:
+            time_delta = self.timer * Neuron.delta_time
+        self.voltage_threshold_attenuation = math.exp(-time_delta/self.tau_3)
+        print(self.voltage_threshold_attenuation)
+
+
     def resetLastFire(self):
-        self.lastFireTime -= 10000
+        if self.lastFireTime:
+            self.lastFireTime -= 10000
         if self.lastFireTime < -5000:
             self.lastFireTime = None
 
@@ -151,17 +180,22 @@ class Neuron(Input):
     def stdp(self):
         if self.doesFire == 1:
             for parent_neuron in self.parents:
+                pre_weight = parent_neuron.children_weights[self]
                 weight_value = parent_neuron.children_weights[self]
                 time_pre = parent_neuron.lastFireTime
                 if not time_pre:
                     continue
                 time_post = self.lastFireTime
                 time_delta = (time_pre-time_post) * self.delta_time
-                time_comp = math.exp(time_delta / self.stdp_time_constant)
+                time_comp = math.exp(time_delta / self.stdp_time_constant) - self.stdp_offset
                 weight_delta = self.learning_rate * time_comp * (self.max_weight - weight_value) * \
-                               (weight_value - self.min_weight)
-                parent_neuron.children_weights[self] += weight_delta
+                    (weight_value - self.min_weight)
+                parent_neuron.children_weights[self] = parent_neuron.children_weights[self] + weight_delta
+                post_weight = parent_neuron.children_weights[self]
+                # print("Pre: {:.3f}; Post: {:.3f}; Diff: {:.3f}".format(pre_weight, post_weight, weight_delta))
 
+        # for parent_neuron in self.parents:
+        #         #     print("current weight: {}".format(parent_neuron.children_weights[self]))
 
 class SNN:
     def __init__(self, max_count, *layers):
@@ -190,6 +224,11 @@ class SNN:
                 for idxInLayer in range(layers[layer_num + 1]):
                     self.neurons[layer_num + 1].append(Neuron())
         self.just_fired_neurons = queue.Queue() # Queue for neurons that just fired and need to update weights MOVE
+        self.last_layer_idx = [len(layers) - 3]
+        nums = range(len(layers) - 2)
+        self.middle_layers_idx = []
+        for number in nums:
+            self.middle_layers_idx.append(number + 1)
 
     def __str__(self):
         str = ""
@@ -211,24 +250,49 @@ class SNN:
                     for parent_neuron in self.neurons[layer_idx - 1]:
                         neuron.addParentConnection(parent_neuron)
 
+    def runOnLayer(self, current_layer, function, run_layer_list):
+        if current_layer in run_layer_list:
+            function()
+
     def runThrough(self):
         # if self.count >= self.max_count:
         #     self.count = 0
         #     self.image_idx += 1
         for input_n in self.input:
-            input_n.addToChildCurrent()
-        for neuron_layer in self.neurons[:-1]:
+            input_n.addToFirstChild()
+        for idx, neuron_layer in enumerate(self.neurons[:-1]):
             for neuron in neuron_layer:
-                neuron.addToChildCurrent()
+                # Last layer does not run this
+                self.runOnLayer(idx, neuron.addToChildCurrent, [0] + self.middle_layers_idx)
+                # All neurons run these
                 neuron.addToSelf()
+                # First Layer runs different updateVoltage
+                self.runOnLayer(idx, neuron.simpleUpdateVoltage, [0])
+                self.runOnLayer(idx, neuron.updateVoltage, self.middle_layers_idx + self.last_layer_idx)
+                # All neurons run these
                 neuron.updateFiring()
                 neuron.updateAvgFR()
-                neuron.stdp()
-        for neuron in self.neurons[-1]:
-            neuron.addToSelf()
-            neuron.updateFiring()
-            neuron.updateAvgFR()
-            neuron.stdp()
+                #Selective neurons run this
+                self.runOnLayer(idx, neuron.stdp, [1])
+                #All neurons run these
+                neuron.adjustAtten()
+        #     for neuron in neuron_layer:
+        #         neuron.addToChildCurrent()
+        #         neuron.addToSelf()
+        #         if idx == 0:
+        #             neuron.simpleUpdateVoltage()
+        #         else:
+        #             neuron.updateVoltage()
+        #         neuron.updateFiring()
+        #         neuron.updateAvgFR()
+        #         self.runOnLayer(idx, neuron.stdp(), [1])
+        #         neuron.adjustAtten()
+        # for neuron in self.neurons[-1]:
+        #     neuron.addToSelf()
+        #     neuron.updateVoltage()
+        #     neuron.updateFiring()
+        #     neuron.updateAvgFR()
+        #     neuron.stdp()
         Neuron.timer += 1
         if Neuron.timer > 5000:
             Neuron.timer -= 10000
@@ -326,6 +390,7 @@ class SNN:
                             counter += 1
                         neuronKey[idx][counter] = child
         return neuronKey
+
     def generateNeuronKey(self):
         neuronKey = []
         for idx, layer in enumerate(self.neurons):
@@ -382,30 +447,58 @@ class SNN:
         self.setInput(pixel_list)
         self.currentNumber = list2[0][0]
 
-def checkNewInput(snn):
-    if snn.count >= snn.max_count:
-        snn.count = 0
-        snn.image_idx += 1
-        snn.convertInput(read_file.return_image('./mnist/train-images.idx3-ubyte', './mnist/train-labels.idx1-ubyte', snn.image_idx))
+    def checkNewInput(self):
+        if self.count >= self.max_count:
+            self.count = 0
+            self.image_idx += 1
+            self.convertInput(read_file.return_image('./mnist/train-images.idx3-ubyte', './mnist/train-labels.idx1-ubyte', self.image_idx))
+
+    def returnLastWeightValues(self):
+        # key_num2N = self.generateIDKey()
+        # output = ""
+        # for parent in self.neurons[-2]:
+        #     for num in range(len(parent.children_weights)):
+        #         neuron = key_num2N[-2].get(num + 1, None)
+        #         if not neuron:
+        #             continue
+        #         output += "{}: {:.3f}, ".format(num+1, parent.children_weights[neuron])
+        #     output += "\n"
+        # return output
+        key_N2num = self.generateNeuronKey()
+        output = ""
+        for parent in self.neurons[-2]:
+            output += "{} | ".format(key_N2num[-3][parent])
+            for child in parent.children_weights:
+                weight = parent.children_weights[child]
+                num = key_N2num[-2][child]
+                output += "{}: {:.3f}, ".format(num, weight)
+            output += "\n"
+        return output
+
 
 randnum = []
 for rand in range(10):
     randnum.append(random.random())
-nn_test = SNN(200, 20, 10, 5, 1)
-nn_test.setupFF()
+# nn_test = SNN(200, 20, 10, 5, 1)
+# nn_test.setupFF()
 
-nn1 = SNN(25, 784, 250, 75, 35, 10)
+nn1 = SNN(50, 784, 250, 75, 35, 10)
 nn1.setupFF()
 
 img_list = read_file.return_image('./mnist/train-images.idx3-ubyte', './mnist/train-labels.idx1-ubyte', nn1.image_idx)
 nn1.convertInput(img_list)
+weights_before = nn1.returnLastWeightValues()
 
 #nn1.saveWeights()
 #nn1.deleteSaves()
 #nn1.loadWeights()
 if __name__ == "__main__":
-    for _ in range(100):
-        print(_, nn1)
-        checkNewInput(nn1)
+    for num in range(5*50):
+        #print(_, nn1)
+        # print(nn1.image_idx)
+        # print(nn1.returnLastWeightValues())
+        nn1.checkNewInput()
         nn1.runThrough()
         pass
+
+    # print(weights_before, "\n", nn1.returnLastWeightValues())

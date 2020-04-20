@@ -40,5 +40,5 @@ def return_images (dir_img, dir_label):
 
     return result
 
-print(return_image('./mnist/train-images.idx3-ubyte', './mnist/train-labels.idx1-ubyte', 0))
-print(return_image('./mnist/t10k-images.idx3-ubyte', './mnist/t10k-labels.idx1-ubyte', 0))
+# print(return_image('./mnist/train-images.idx3-ubyte', './mnist/train-labels.idx1-ubyte', 0))
+# print(return_image('./mnist/t10k-images.idx3-ubyte', './mnist/t10k-labels.idx1-ubyte', 0))

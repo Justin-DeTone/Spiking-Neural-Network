@@ -12,7 +12,7 @@ w.pack()
 root.mainloop()
 """
 
-refresh_time = 0.3
+refresh_time = 0.5 #time in seconds for next runthrough)
 is_paused = False
 
 class NeuronDisplay:
@@ -42,18 +42,43 @@ class NeuronDisplay:
         else:
             return "#ffffff"
 
+    def getColor3(self, base, neuron):
+        # Color gets approaches darkness of base color as voltage approaches threshold
+        rgb = cc.hexToRGB(base)
+        rgb2 = []
+        for color in rgb:
+            rgb = int(255 - (math.pow(neuron.voltage_threshold - neuron.voltage, 1)) * (255 - color))
+            if rgb > 255:
+                rgb = 255
+            elif rgb < 0:
+                rgb = 0
+            rgb2.append(rgb)
+        return cc.rgbToHex(rgb2)
+
     def display(self):
         self.item = w.create_oval(self.x_coor - self.radius, self.y_coor - self.radius, self.x_coor + self.radius,
                                   self.y_coor + self.radius, fill=self.getColor("#ff6600", self.neuron))
         if self.radius > 6:
             self.text = w.create_text(self.x_coor, self.y_coor, text="{:.1f}".format(self.neuron.firingAvg))
 
+    def display2(self):
+        self.item = w.create_oval(self.x_coor - self.radius, self.y_coor - self.radius, self.x_coor + self.radius,
+                                  self.y_coor + self.radius, fill=self.getColor("#ff6600", self.neuron))
+        if self.radius > 6:
+            self.text = w.create_text(self.x_coor, self.y_coor,
+                                      text="{:.1f}".format(self.neuron.voltage/self.neuron.voltage_threshold))
+
     def updateColor(self):
-        w.itemconfig(self.item, fill=self.getColor("#ff6600", self.neuron))
+        w.itemconfig(self.item, fill=self.getColor2("#ff6600", self.neuron))
 
     def updateText(self):
         if self.radius > 6:
             w.itemconfig(self.text, text="{:.1f}".format(self.neuron.firingAvg))
+        pass
+
+    def updateText2(self):
+        if self.radius > 6:
+            w.itemconfig(self.text, text="{:.1f}".format(self.neuron.voltage/self.neuron.voltage_threshold))
         pass
 
 class WeightDisplay:
@@ -66,18 +91,26 @@ class WeightDisplay:
         self.item = None
 
     def display(self):
-        self.item = w.create_line(self.x1, self.y1, self.x2, self.y2)
+        self.item = w.create_line(self.x1, self.y1, self.x2, self.y2, width=0.2)
 
     def update(self):
         w.itemconfig(self.item)
 
 class SNNDisplay:
-    def __init__(self, neurons):
-        self.neurons = neurons
+    def __init__(self, network):
+        self.network = network
+        self.neurons = network.neurons
         self.neuronDisp = []
         self.width_diff = 0
         self.height_diff = []
         self.radius = []
+        self.number = None
+
+    def addCurrentNum(self):
+        self.number = w.create_text(20, 20, text=self.network.currentNumber)
+
+    def updateCurrentNum(self):
+        w.itemconfig(self.number, text=self.network.currentNumber)
 
     def getRadius(self):
         for layer in self.neurons:
@@ -144,13 +177,15 @@ class SNNDisplay:
             for neuron in layer:
                 for weight in neuron.child_weight_gui:
                     weight.display()
-                neuron.neuron_gui.display()
+                neuron.neuron_gui.display2()
+        self.addCurrentNum()
 
     def updateSNN(self):
         for layer in self.neurons:
             for neuron in layer:
                 neuron.neuron_gui.updateColor()
-                neuron.neuron_gui.updateText()
+                neuron.neuron_gui.updateText2()
+        self.updateCurrentNum()
 
 """
 class UpdateSNN(threading.Thread):
@@ -169,6 +204,7 @@ def updateSNN():
 def updateSNN(network):
     if not is_paused:
         network.runThrough()
+        network.checkNewInput()
     print(network)
     next_ev = threading.Timer(refresh_time, updateSNN, [network])
     next_ev.start()
@@ -196,7 +232,7 @@ if __name__ == "__main__":
     w = tk.Canvas(master, width=can_width, height=can_height)
     w.pack()
 
-    a = SNNDisplay(n.nn1.neurons)
+    a = SNNDisplay(n.nn1)
     a.initNeurons()
     #a.initWeights()
     a.displaySNN()
@@ -205,6 +241,7 @@ if __name__ == "__main__":
 
     # tk.mainloop()
     updateSNN(n.nn1)
+
 
     while 1:
         a.updateSNN()
