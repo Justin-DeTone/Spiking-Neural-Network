@@ -131,23 +131,6 @@ class SNNDisplay:
             if radius > width_radius:
                 self.radius[idx] = width_radius
 
-        # maxNPerLayer = 0
-        # for layer in self.neurons:
-        #     if len(layer) > maxNPerLayer:
-        #         maxNPerLayer = len(layer)
-        # self.height_diff = can_height / maxNPerLayer
-        #
-        # self.width_diff = can_width / len(self.neurons)
-        #
-        # # Calculate radius according to height spacing
-        # self.radius = can_height * 2/(5 * maxNPerLayer)
-        #
-        # #Calculate radius according to width spacing
-        # tmp = can_width/(6 * len(self.neurons))
-        #
-        # #Choose lower radius
-        # # if tmp < self.radius:
-        # #     self.radius = tmp
 
     def initNeurons(self):
         self.getRadius()
