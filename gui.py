@@ -184,9 +184,9 @@ def updateSNN():
     tmp.start()
 """
 
-def updateSNN(network):
+def updateSNN(network, layers_to_update=None):
     if not is_paused:
-        network.runThrough()
+        network.runThrough(layers_to_update)
         network.checkNewInput()
     print(network)
     next_ev = threading.Timer(refresh_time, updateSNN, [network])

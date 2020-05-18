@@ -2,8 +2,8 @@ import numpy as np
 import math
 import random
 import pickle
-import queue
 import read_file
+import plot
 
 class Input:
     def __init__(self):
@@ -42,7 +42,7 @@ class Neuron(Input):
 
     learning_rate = 1
     stdp_time_constant = 1
-    stdp_offset = 0.7
+    stdp_offset = 0.5
     max_weight = 1
     min_weight = -1
 
@@ -52,7 +52,7 @@ class Neuron(Input):
         self.current = 0
         self.voltage = 0
         self.resistance = 1
-        self.voltage_threshold = 5
+        self.voltage_threshold = 1
         self.voltage_threshold_attenuation = 1
         self.tau_3 = 1   # time constant for decay of voltage threshold when no firings
         self.bias = 0
@@ -66,7 +66,7 @@ class Neuron(Input):
         self.self_weight = 1   # Should be between 0 and 1, dictates percent of current that is subtracted from current for suppression
 
         self.revSSum = 0
-        self.tau_2 = 5   # decay of r value
+        self.tau_2 = 1   # decay of r value
         self.tau_0 = 1  # time constant for decay of voltage value
 
         self.current_neuron_time = 10000
@@ -204,8 +204,8 @@ class Neuron(Input):
     def resetLastFire(self):
         if self.lastFireTime:
             self.lastFireTime -= 10000
-        if self.lastFireTime < -5000:
-            self.lastFireTime = None
+            if self.lastFireTime < -5000:
+                self.lastFireTime = None
 
     def updateAvgFR(self):
         self.firingRecord.append(self.doesFire)
@@ -232,8 +232,8 @@ class Neuron(Input):
                 weight_delta = self.learning_rate * time_comp * (self.max_weight - weight_value) * \
                     (weight_value - self.min_weight)
                 parent_neuron.children_weights[self] = parent_neuron.children_weights[self] + weight_delta
-                # post_weight = parent_neuron.children_weights[self]
-                # print("Pre: {:.3f}; Post: {:.3f}; Diff: {:.3f}".format(pre_weight, post_weight, weight_delta))
+                post_weight = parent_neuron.children_weights[self]
+                print("Pre: {:.3f}; Post: {:.3f}; Diff: {:.3f}".format(pre_weight, post_weight, weight_delta))
 
         # for parent_neuron in self.parents:
         #         #     print("current weight: {}".format(parent_neuron.children_weights[self]))
@@ -247,12 +247,18 @@ class SNN:
         self.test_data = None
         self.currentNumber = None
         self.dictOfAttributeAdjustments = {}
+        self.count_to_five = 0
 
         self.middle_layers_idx = []
 
         self.input = []
         self.neurons = [[]]
         self.layers = layers
+
+        self.image_dir = None
+        self.label_dir = None
+
+        self.plot_reference = plot.Plot()
 
     def __str__(self):
         snn_string = ""
@@ -357,9 +363,7 @@ class SNN:
                 newNeuron = Neuron()
                 self.updateNeuronAttributesInstance(newNeuron)
                 self.neurons[layer_num + 1].append(newNeuron)
-        print(self.neurons[1][0].delta_time)
         self.updateNeuronAttributesClass(self.neurons[0][0])
-        print(self.neurons[1][0].delta_time)
 
 
 
@@ -408,6 +412,7 @@ class SNN:
                 for neuron in neuron_layer:
                     neuron.resetLastFire()
         self.count += 1
+        self.count_to_five += 1
 
     def setNormalizedInput(self, values):
         """
@@ -550,11 +555,12 @@ class SNN:
         self.currentNumber = list2[0][0]
 
     def checkNewInput(self):
-        if self.count >= self.max_count:
+        if self.count == 1:
             print(self.image_idx)
+        if self.count >= self.max_count:
             self.count = 0
             self.image_idx += 1
-            self.convertInput(read_file.return_image('./mnist/train-images.idx3-ubyte', './mnist/train-labels.idx1-ubyte', self.image_idx))
+            self.convertInput(read_file.return_image(self.image_dir, self.label_dir, self.image_idx))
 
     def returnLastWeightValues(self):
         key_N2num = self.generateNeuronKey()
@@ -569,6 +575,8 @@ class SNN:
         return output
 
     def setupMNIST(self, image_dir, label_dir):
+        self.image_dir = image_dir
+        self.label_dir = label_dir
         img_list = read_file.return_image(image_dir, label_dir, self.image_idx)
         self.convertInput(img_list)
 
@@ -582,9 +590,27 @@ class SNN:
             if layer == 0:
                 print("cannot update with 0 as post layer")
                 return
-        for _ in range(self.max_count * no_of_images):
+        for count in range(self.max_count * no_of_images):
+            self.runCalculateGloabalFireRate()
             self.checkNewInput()
             self.runThrough([1])
+        self.plot_reference.plotPlot()
+
+    def runCalculateGloabalFireRate(self):
+        if self.count_to_five % 5 == 0:
+            self.plot_reference.addPoint(self.count_to_five, self.calculateGlobalFireRate())
+
+    def calculateGlobalFireRate(self):
+        divisor = 0
+        numerator = 0
+        for layer in self.neurons[1:]:
+            for neuron in layer:
+                divisor += 1
+                numerator += neuron.firingAvg
+        return numerator / divisor
+
+
+
 
 randnum = []
 for rand in range(10):
@@ -593,27 +619,18 @@ for rand in range(10):
 # nn_test.setupFF()
 
 nn1 = SNN(25, 784, 250, 75, 35, 10)
-nn1.set_attributes(0.1, 26, 0.525, 1.2, 0.5, 2, -2, 2.1, 1.2, 1.2, 1.2, 1.2, .1, 1)
+nn1.set_attributes(stdp_offset=0.368, stdp_tau=0.5, tau_S=100, tau_R=100, voltage_threshold=25, tau_Threshold=100)
 nn1.neuronPopulate()
 nn1.setupFF()
 
 # img_list = read_file.return_image('./mnist/train-images.idx3-ubyte', './mnist/train-labels.idx1-ubyte', nn1.image_idx)
 # # nn1.convertInput(img_list)
 nn1.setupMNIST('./mnist/train-images.idx3-ubyte', './mnist/train-labels.idx1-ubyte')
-
+# nn1.loadWeights()
 #nn1.saveWeights()
 #nn1.deleteSaves()
 #nn1.loadWeights()
-nn1.runSNN(5, [1])
 
-# if __name__ == "__main__":
-#     for num in range(25*0):
-#         #print(_, nn1)
-#         # print(nn1.image_idx)
-#         # print(nn1.returnLastWeightValues())
-#
-#         nn1.checkNewInput()
-#         nn1.runThrough(stdp_active_layers_list=)
-#         pass
-#
-#     # print(weights_before, "\n", nn1.returnLastWeightValues())
+
+if __name__ == "__main__":
+    nn1.runSNN(10, [1])
